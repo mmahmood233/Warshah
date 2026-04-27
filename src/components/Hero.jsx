@@ -13,7 +13,8 @@ export default function Hero() {
   const rafRef = useRef(null)
   const [loadProgress, setLoadProgress] = useState(0)
   const [loaded, setLoaded] = useState(false)
-  const [textStep, setTextStep] = useState(0) // 0=hidden 1=eyebrow 2=h1 3=sub 4=cta
+  const [loaderVisible, setLoaderVisible] = useState(true)
+  const [textStep, setTextStep] = useState(0)
   const [animDone, setAnimDone] = useState(false)
   const [scrollY, setScrollY] = useState(0)
 
@@ -37,7 +38,12 @@ export default function Hero() {
         setLoadProgress(Math.round((loadedCount / TOTAL_FRAMES) * 100))
         if (loadedCount === TOTAL_FRAMES) {
           imagesRef.current = images
-          setLoaded(true)
+          // Brief hold so the spinner doesn't flash away
+          setTimeout(() => {
+            setLoaded(true)
+            // Fade out loader then remove
+            setTimeout(() => setLoaderVisible(false), 700)
+          }, 400)
         }
       }
       img.onload = onDone
@@ -47,7 +53,7 @@ export default function Hero() {
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [])
 
-  // Canvas animation
+  // Canvas animation — starts after loader fades out
   useEffect(() => {
     if (!loaded) return
     const canvas = canvasRef.current
@@ -110,53 +116,76 @@ export default function Hero() {
   return (
     <section style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden', background: '#060606' }}>
 
-      {/* Canvas */}
-      <canvas
-        ref={canvasRef}
-        style={{
-          position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block',
-          opacity: loaded ? 1 : 0,
-          transition: 'opacity 0.8s ease',
-          transform: `translateY(${parallaxOffset}px)`,
-        }}
-      />
+      {/* ── Spinning logo loader ── */}
+      {loaderVisible && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 10,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          background: '#060606',
+          opacity: loaded ? 0 : 1,
+          transition: 'opacity 0.7s ease',
+          pointerEvents: loaded ? 'none' : 'all',
+        }}>
+          {/* Spinning logo video */}
+          <div style={{ position: 'relative', width: 180, height: 180, marginBottom: 36 }}>
+            <video
+              src="/warshalogospinning.mp4"
+              autoPlay
+              loop
+              muted
+              playsInline
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+              }}
+            />
+          </div>
 
-      {/* Loading bar */}
-      {!loaded && (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
-          <img src="/logo.png" alt="Warshah" style={{ height: 48, borderRadius: 8, opacity: 0.9 }} />
-          <div style={{ width: 160, height: 1, background: '#1e1e1e', borderRadius: 1, overflow: 'hidden', position: 'relative' }}>
+          {/* Progress bar */}
+          <div style={{ width: 120, height: 1, background: '#1a1a1a', borderRadius: 1, overflow: 'hidden', position: 'relative' }}>
             <div style={{
               position: 'absolute', left: 0, top: 0, height: '100%',
               width: `${loadProgress}%`,
-              background: '#c9933a',
+              background: 'linear-gradient(to right, #a06828, #c9933a)',
               borderRadius: 1,
-              transition: 'width 0.1s linear',
+              transition: 'width 0.12s linear',
             }} />
           </div>
-          <p style={{ fontSize: 11, color: '#333', letterSpacing: '0.15em', fontWeight: 400 }}>
+          <p style={{ fontSize: 10, color: '#2e2e2e', marginTop: 12, letterSpacing: '0.18em', fontWeight: 400 }}>
             {loadProgress}%
           </p>
         </div>
       )}
 
+      {/* ── Canvas ── */}
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block',
+          opacity: loaded ? 1 : 0,
+          transition: 'opacity 0.9s ease',
+          transform: `translateY(${parallaxOffset}px)`,
+        }}
+      />
+
       {/* Gradient overlays */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
         background: 'linear-gradient(to top, rgba(6,6,6,0.92) 0%, rgba(6,6,6,0.25) 55%, rgba(6,6,6,0.15) 100%)',
       }} />
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
         background: 'linear-gradient(to right, rgba(6,6,6,0.35) 0%, transparent 40%, transparent 60%, rgba(6,6,6,0.35) 100%)',
       }} />
 
-      {/* Hero text */}
+      {/* ── Hero text ── */}
       <div style={{
         position: 'absolute', inset: 0,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end',
-        padding: '0 24px 9vh',
-        textAlign: 'center',
+        padding: '0 24px 9vh', textAlign: 'center',
         transform: `translateY(${-parallaxOffset * 0.4}px)`,
       }}>
-        {/* Eyebrow */}
         <p style={{
           fontSize: 11, letterSpacing: '0.22em', color: '#c9933a', fontWeight: 500,
           textTransform: 'uppercase', marginBottom: 18,
@@ -167,13 +196,10 @@ export default function Hero() {
           Launching in Bahrain
         </p>
 
-        {/* Headline */}
         <h1 style={{
           fontSize: 'clamp(56px, 9vw, 108px)',
-          fontWeight: 300, lineHeight: 0.98,
-          letterSpacing: '-0.04em',
-          color: '#f5f5f5',
-          marginBottom: 28,
+          fontWeight: 300, lineHeight: 0.98, letterSpacing: '-0.04em',
+          color: '#f5f5f5', marginBottom: 28,
           opacity: textStep >= 2 ? 1 : 0,
           transform: textStep >= 2 ? 'translateY(0)' : 'translateY(16px)',
           transition: 'opacity 0.9s cubic-bezier(0.16,1,0.3,1), transform 0.9s cubic-bezier(0.16,1,0.3,1)',
@@ -182,7 +208,6 @@ export default function Hero() {
           <em style={{ fontStyle: 'normal', color: '#c9933a' }}>handled.</em>
         </h1>
 
-        {/* Sub */}
         <p style={{
           fontSize: 'clamp(15px, 1.8vw, 19px)', fontWeight: 300, lineHeight: 1.65,
           color: '#888', maxWidth: 480, marginBottom: 44, letterSpacing: '0.01em',
@@ -194,7 +219,6 @@ export default function Hero() {
           get it done, and bring it back.
         </p>
 
-        {/* CTAs */}
         <div style={{
           display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center',
           opacity: textStep >= 4 ? 1 : 0,
