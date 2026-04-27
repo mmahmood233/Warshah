@@ -14,7 +14,7 @@ import Footer from './components/Footer'
 
 export default function App() {
   return (
-    <>
+    <div className="grain">
       <Nav />
       <Hero />
       <TrustBar />
@@ -27,6 +27,6 @@ export default function App() {
       <AppPreview />
       <FinalCTA />
       <Footer />
-    </>
+    </div>
   )
 }

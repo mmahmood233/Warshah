@@ -3,9 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 const TOTAL_FRAMES = 121
 const FPS = 30
 const FRAME_DURATION = 1000 / FPS
-
-const frameUrl = (n) =>
-  `/frames/garage/frame_${String(n).padStart(4, '0')}.jpg`
+const frameUrl = (n) => `/frames/garage/frame_${String(n).padStart(4, '0')}.jpg`
 
 export default function Hero() {
   const canvasRef = useRef(null)
@@ -13,10 +11,20 @@ export default function Hero() {
   const frameRef = useRef(0)
   const lastTimeRef = useRef(null)
   const rafRef = useRef(null)
+  const [loadProgress, setLoadProgress] = useState(0)
   const [loaded, setLoaded] = useState(false)
-  const [textVisible, setTextVisible] = useState(false)
+  const [textStep, setTextStep] = useState(0) // 0=hidden 1=eyebrow 2=h1 3=sub 4=cta
   const [animDone, setAnimDone] = useState(false)
+  const [scrollY, setScrollY] = useState(0)
 
+  // Parallax
+  useEffect(() => {
+    const onScroll = () => setScrollY(window.scrollY)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // Preload frames
   useEffect(() => {
     const images = []
     let loadedCount = 0
@@ -24,28 +32,22 @@ export default function Hero() {
     for (let i = 1; i <= TOTAL_FRAMES; i++) {
       const img = new Image()
       img.src = frameUrl(i)
-      img.onload = () => {
+      const onDone = () => {
         loadedCount++
+        setLoadProgress(Math.round((loadedCount / TOTAL_FRAMES) * 100))
         if (loadedCount === TOTAL_FRAMES) {
           imagesRef.current = images
           setLoaded(true)
         }
       }
-      img.onerror = () => {
-        loadedCount++
-        if (loadedCount === TOTAL_FRAMES) {
-          imagesRef.current = images
-          setLoaded(true)
-        }
-      }
+      img.onload = onDone
+      img.onerror = onDone
       images.push(img)
     }
-
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    }
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
   }, [])
 
+  // Canvas animation
   useEffect(() => {
     if (!loaded) return
     const canvas = canvasRef.current
@@ -54,18 +56,13 @@ export default function Hero() {
 
     const drawFrame = (index) => {
       const img = imagesRef.current[index]
-      if (!img || !img.naturalWidth) return
-      const cw = canvas.width
-      const ch = canvas.height
-      const iw = img.naturalWidth
-      const ih = img.naturalHeight
-      const scale = Math.max(cw / iw, ch / ih)
-      const dw = iw * scale
-      const dh = ih * scale
-      const dx = (cw - dw) / 2
-      const dy = (ch - dh) / 2
+      if (!img?.naturalWidth) return
+      const { width: cw, height: ch } = canvas
+      const scale = Math.max(cw / img.naturalWidth, ch / img.naturalHeight)
+      const dw = img.naturalWidth * scale
+      const dh = img.naturalHeight * scale
       ctx.clearRect(0, 0, cw, ch)
-      ctx.drawImage(img, dx, dy, dw, dh)
+      ctx.drawImage(img, (cw - dw) / 2, (ch - dh) / 2, dw, dh)
     }
 
     const resize = () => {
@@ -79,28 +76,27 @@ export default function Hero() {
     const animate = (timestamp) => {
       if (!lastTimeRef.current) lastTimeRef.current = timestamp
       const delta = timestamp - lastTimeRef.current
-
       if (delta >= FRAME_DURATION) {
         lastTimeRef.current = timestamp
         drawFrame(frameRef.current)
 
-        // Trigger text fade after 60% of animation
-        if (frameRef.current >= Math.floor(TOTAL_FRAMES * 0.6)) {
-          setTextVisible(true)
-        }
+        const pct = frameRef.current / (TOTAL_FRAMES - 1)
+        if (pct >= 0.45 && textStep < 1) setTextStep(1)
+        if (pct >= 0.60 && textStep < 2) setTextStep(2)
+        if (pct >= 0.75 && textStep < 3) setTextStep(3)
+        if (pct >= 0.90 && textStep < 4) setTextStep(4)
 
         if (frameRef.current < TOTAL_FRAMES - 1) {
           frameRef.current++
           rafRef.current = requestAnimationFrame(animate)
         } else {
+          setTextStep(4)
           setAnimDone(true)
-          setTextVisible(true)
         }
       } else {
         rafRef.current = requestAnimationFrame(animate)
       }
     }
-
     rafRef.current = requestAnimationFrame(animate)
 
     return () => {
@@ -109,191 +105,146 @@ export default function Hero() {
     }
   }, [loaded])
 
+  const parallaxOffset = scrollY * 0.25
+
   return (
-    <section style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden', background: '#0e0e0e' }}>
-      {/* Frame canvas */}
+    <section style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden', background: '#060606' }}>
+
+      {/* Canvas */}
       <canvas
         ref={canvasRef}
         style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          display: 'block',
+          position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block',
           opacity: loaded ? 1 : 0,
-          transition: 'opacity 0.6s ease',
+          transition: 'opacity 0.8s ease',
+          transform: `translateY(${parallaxOffset}px)`,
         }}
       />
 
-      {/* Loading state */}
+      {/* Loading bar */}
       {!loaded && (
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <div style={{
-            width: 40,
-            height: 2,
-            background: '#333',
-            borderRadius: 2,
-            overflow: 'hidden',
-            position: 'relative',
-          }}>
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+          <img src="/logo.png" alt="Warshah" style={{ height: 48, borderRadius: 8, opacity: 0.9 }} />
+          <div style={{ width: 160, height: 1, background: '#1e1e1e', borderRadius: 1, overflow: 'hidden', position: 'relative' }}>
             <div style={{
-              position: 'absolute',
-              left: 0,
-              top: 0,
-              height: '100%',
-              width: '40%',
+              position: 'absolute', left: 0, top: 0, height: '100%',
+              width: `${loadProgress}%`,
               background: '#c9933a',
-              borderRadius: 2,
-              animation: 'slide 1s ease-in-out infinite',
+              borderRadius: 1,
+              transition: 'width 0.1s linear',
             }} />
           </div>
-          <style>{`
-            @keyframes slide {
-              0% { transform: translateX(0); }
-              50% { transform: translateX(150%); }
-              100% { transform: translateX(0); }
-            }
-          `}</style>
+          <p style={{ fontSize: 11, color: '#333', letterSpacing: '0.15em', fontWeight: 400 }}>
+            {loadProgress}%
+          </p>
         </div>
       )}
 
       {/* Gradient overlays */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'linear-gradient(to top, rgba(14,14,14,0.85) 0%, rgba(14,14,14,0.3) 50%, rgba(14,14,14,0.2) 100%)',
-        pointerEvents: 'none',
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: 'linear-gradient(to top, rgba(6,6,6,0.92) 0%, rgba(6,6,6,0.25) 55%, rgba(6,6,6,0.15) 100%)',
       }} />
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        background: 'linear-gradient(to right, rgba(14,14,14,0.4) 0%, transparent 50%, rgba(14,14,14,0.4) 100%)',
-        pointerEvents: 'none',
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: 'linear-gradient(to right, rgba(6,6,6,0.35) 0%, transparent 40%, transparent 60%, rgba(6,6,6,0.35) 100%)',
       }} />
 
-      {/* Hero content */}
+      {/* Hero text */}
       <div style={{
-        position: 'absolute',
-        inset: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        paddingBottom: '10vh',
+        position: 'absolute', inset: 0,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end',
+        padding: '0 24px 9vh',
         textAlign: 'center',
-        padding: '0 24px 10vh',
-        opacity: textVisible ? 1 : 0,
-        transform: textVisible ? 'translateY(0)' : 'translateY(16px)',
-        transition: 'opacity 1s ease, transform 1s ease',
+        transform: `translateY(${-parallaxOffset * 0.4}px)`,
       }}>
+        {/* Eyebrow */}
         <p style={{
-          fontSize: 12,
-          letterSpacing: '0.2em',
-          color: '#c9933a',
-          fontWeight: 500,
-          textTransform: 'uppercase',
-          marginBottom: 20,
+          fontSize: 11, letterSpacing: '0.22em', color: '#c9933a', fontWeight: 500,
+          textTransform: 'uppercase', marginBottom: 18,
+          opacity: textStep >= 1 ? 1 : 0,
+          transform: textStep >= 1 ? 'translateY(0)' : 'translateY(10px)',
+          transition: 'opacity 0.8s ease, transform 0.8s ease',
         }}>
           Launching in Bahrain
         </p>
 
+        {/* Headline */}
         <h1 style={{
-          fontSize: 'clamp(52px, 8vw, 96px)',
-          fontWeight: 300,
-          lineHeight: 1.05,
-          letterSpacing: '-0.03em',
+          fontSize: 'clamp(56px, 9vw, 108px)',
+          fontWeight: 300, lineHeight: 0.98,
+          letterSpacing: '-0.04em',
           color: '#f5f5f5',
-          marginBottom: 24,
-          maxWidth: 800,
+          marginBottom: 28,
+          opacity: textStep >= 2 ? 1 : 0,
+          transform: textStep >= 2 ? 'translateY(0)' : 'translateY(16px)',
+          transition: 'opacity 0.9s cubic-bezier(0.16,1,0.3,1), transform 0.9s cubic-bezier(0.16,1,0.3,1)',
         }}>
-          Your car,<br />handled.
+          Your car,<br />
+          <em style={{ fontStyle: 'normal', color: '#c9933a' }}>handled.</em>
         </h1>
 
+        {/* Sub */}
         <p style={{
-          fontSize: 'clamp(16px, 2vw, 20px)',
-          fontWeight: 300,
-          lineHeight: 1.6,
-          color: '#b0b0b0',
-          maxWidth: 520,
-          marginBottom: 40,
-          letterSpacing: '0.01em',
+          fontSize: 'clamp(15px, 1.8vw, 19px)', fontWeight: 300, lineHeight: 1.65,
+          color: '#888', maxWidth: 480, marginBottom: 44, letterSpacing: '0.01em',
+          opacity: textStep >= 3 ? 1 : 0,
+          transform: textStep >= 3 ? 'translateY(0)' : 'translateY(12px)',
+          transition: 'opacity 0.8s ease 0.1s, transform 0.8s ease 0.1s',
         }}>
           Book any car service in Bahrain. We pick it up,
           get it done, and bring it back.
         </p>
 
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
-          <a
-            href="#waitlist"
-            style={{
-              background: '#c9933a',
-              color: '#000',
-              padding: '14px 32px',
-              borderRadius: 10,
-              fontSize: 15,
-              fontWeight: 500,
-              textDecoration: 'none',
-              letterSpacing: '0.01em',
-              transition: 'opacity 0.2s, transform 0.2s',
-              display: 'inline-block',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.opacity = '0.85'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-            onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'translateY(0)' }}
-          >
+        {/* CTAs */}
+        <div style={{
+          display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center',
+          opacity: textStep >= 4 ? 1 : 0,
+          transform: textStep >= 4 ? 'translateY(0)' : 'translateY(10px)',
+          transition: 'opacity 0.7s ease 0.15s, transform 0.7s ease 0.15s',
+        }}>
+          <a href="#waitlist" style={primaryBtn}
+            onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; e.currentTarget.style.transform = 'translateY(-2px)' }}
+            onMouseLeave={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'translateY(0)' }}>
             Get Early Access
           </a>
-          <a
-            href="#how-it-works"
-            style={{
-              background: 'transparent',
-              color: '#f0f0f0',
-              padding: '14px 32px',
-              borderRadius: 10,
-              fontSize: 15,
-              fontWeight: 400,
-              textDecoration: 'none',
-              border: '1px solid rgba(255,255,255,0.15)',
-              letterSpacing: '0.01em',
-              transition: 'border-color 0.2s',
-              display: 'inline-block',
-            }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)'}
-            onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'}
-          >
+          <a href="#how-it-works" style={ghostBtn}
+            onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.3)'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'}>
             How it works ↓
           </a>
         </div>
       </div>
 
-      {/* Scroll indicator */}
+      {/* Scroll needle */}
       {animDone && (
         <div style={{
-          position: 'absolute',
-          bottom: 32,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 8,
-          opacity: 0.4,
-          animation: 'bounce 2s ease-in-out infinite',
+          position: 'absolute', bottom: 28, left: '50%', transform: 'translateX(-50%)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+          animation: 'needleDrop 2.4s ease-in-out infinite',
         }}>
-          <div style={{ width: 1, height: 40, background: '#f0f0f0' }} />
-          <style>{`
-            @keyframes bounce {
-              0%, 100% { transform: translateX(-50%) translateY(0); }
-              50% { transform: translateX(-50%) translateY(6px); }
-            }
-          `}</style>
+          <div style={{ width: 1, height: 36, background: 'linear-gradient(to bottom, transparent, rgba(201,147,58,0.5))' }} />
+          <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#c9933a' }} />
+          <style>{`@keyframes needleDrop {
+            0%,100%{transform:translateX(-50%) translateY(0);opacity:.5}
+            50%{transform:translateX(-50%) translateY(7px);opacity:1}
+          }`}</style>
         </div>
       )}
     </section>
   )
+}
+
+const primaryBtn = {
+  background: '#c9933a', color: '#000',
+  padding: '14px 32px', borderRadius: 10,
+  fontSize: 14, fontWeight: 500, textDecoration: 'none',
+  letterSpacing: '0.02em', display: 'inline-block',
+  transition: 'opacity 0.2s, transform 0.25s cubic-bezier(0.16,1,0.3,1)',
+}
+const ghostBtn = {
+  background: 'transparent', color: '#d0d0d0',
+  padding: '14px 32px', borderRadius: 10,
+  fontSize: 14, fontWeight: 400, textDecoration: 'none',
+  border: '1px solid rgba(255,255,255,0.12)',
+  letterSpacing: '0.02em', display: 'inline-block',
+  transition: 'border-color 0.2s',
 }
